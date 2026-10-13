@@ -1,0 +1,30 @@
+
+===== scenario T2, Q = 50: 108 common runs (JH: 108, J1: 108)
+-- T2, all settings
+   R_th    n        JH         J        J1             JH-J1              J-J1   QoS met JH/J/J1
+      0   18    123.91    124.68    123.76    +0.15± 0.81       +0.92± 0.47      18/18/18
+    0.5   18    120.44    121.41    120.85    -0.41± 1.00       +0.55± 0.64      18/18/18
+      1   18    113.02    113.54    112.95    +0.07± 0.86       +0.59± 0.46      18/18/18
+    1.5   18    103.47    103.61    103.59    -0.12± 0.71       +0.02± 0.27      18/18/18
+      2   18     94.06     93.54     93.22    +0.84± 0.63       +0.32± 0.18      18/18/18
+    2.5   18     77.34     76.86     75.61    +1.72± 0.97       +1.25± 0.89      15/15/15
+    all  108    105.37    105.61    105.00    +0.37± 0.34       +0.61± 0.22      105/105/105
+-- JH: mean served streams 9.50, group-common served 1.00, private served 7.50; BS-specific in 0/108 runs; per run, carried by a subset of the BSs: group-common 0.00, private 0.00
+-- J: stream-set test made in 36/108 runs, 1-layer kept in 12
+-- CPU per run (s): JH 74.3, J 68.4, J1 50.6; JH discrete design 0.001
+
+===== scenario E3, Q = 50: 108 common runs (JH: 108, J1: 108)
+-- E3, all settings
+   R_th    n        JH         J        J1             JH-J1              J-J1   QoS met JH/J/J1
+      0   18    139.60    139.50    139.09    +0.50± 0.43       +0.41± 0.41      18/18/18
+    0.5   18    133.37    133.02    132.32    +1.05± 0.76       +0.70± 0.70      18/18/18
+      1   18    126.26    124.99    124.38    +1.87± 1.19       +0.60± 0.60      18/18/18
+    1.5   18    112.47    112.79    112.00    +0.47± 0.65       +0.79± 0.55      18/18/18
+      2   18     95.46     95.46     95.61    -0.15± 0.73       -0.15± 0.73      16/16/16
+    2.5   18     79.12     78.43     78.16    +0.96± 0.73       +0.27± 0.27      12/12/12
+    all  108    114.38    114.03    113.59    +0.78± 0.32       +0.44± 0.23      100/100/100
+-- JH: mean served streams 8.83, group-common served 0.17, private served 7.67; BS-specific in 0/108 runs; per run, carried by a subset of the BSs: group-common 0.00, private 0.00
+-- J: stream-set test made in 18/108 runs, 1-layer kept in 9
+-- CPU per run (s): JH 87.3, J 98.0, J1 99.9; JH discrete design 0.001
+
+written /home/user/Thesis-Test/dd/discrete_design_v10/results/JH__report.json

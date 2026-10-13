@@ -1,0 +1,485 @@
+diff -ruN -x __pycache__ orig/discrete_design_v10/code/algo.py discrete_design_v10/code/algo.py
+--- orig/discrete_design_v10/code/algo.py	2026-10-13 00:53:09.000000000 +0000
++++ discrete_design_v10/code/algo.py	2026-10-13 05:14:09.604614054 +0000
+@@ -521,7 +521,46 @@
+     return H_.scale_to_power(Wb, p)
+ 
+ 
++def init_core_bs(H, d, p):
++    """The core-user start for a BS-specific association (d.bsmask; design round v10, option init='core_bs', off by
++    default): as init_core, but the regularized ZF column of every core private stream is computed on the antennas of
++    the BSs that carry it (H restricted to those columns), so that zeroing the blocks not carried does not destroy it;
++    every other stream as in init_core, masked before its noise-level scaling. Equals init_core up to rounding when
++    every BS carries every stream."""
++    bm = getattr(d, 'bsmask', None)
++    if bm is None:
++        return init_core(H, d, p)
++    N, B = p['N'], p['B']
++    ant = lambda j: np.concatenate([np.arange(b * N, (b + 1) * N) for b in range(B) if bm[b, d.col[j]]])
++    base = [0] + [1 + d.G + k for k in d.core if (1 + d.G + k) in d.col]
++    bpriv = [j - 1 - d.G for j in base if j > d.G]
++    W = np.zeros((p['BN'], d.nS), complex)
++    alpha = len(bpriv) / (B * p['Pmax'])
++    for k in bpriv:
++        j = 1 + d.G + k; a = ant(j); Hp = H[bpriv][:, a]
++        v = np.linalg.solve(Hp.conj().T @ Hp + alpha * np.eye(len(a)), H[k, a].conj())
++        W[a, d.col[j]] = v / np.linalg.norm(v)
++    for j in d.served:
++        if j > d.G and j - 1 - d.G in bpriv: continue
++        a = ant(j); F = H[d.decoders[j]][:, a]
++        if j <= d.G:
++            Fn = F / np.linalg.norm(F, axis=1)[:, None]
++            _, U = np.linalg.eigh(Fn.conj().T @ Fn); v = U[:, -1]
++        else:
++            v = F[0].conj() / np.linalg.norm(F[0])
++        W[a, d.col[j]] = v
++    cols = [d.col[j] for j in base]
++    Wb = np.zeros_like(W); Wb[:, cols] = W[:, cols]
++    Wb = H_.scale_to_power(Wb, p)
++    for j in d.served:
++        if j in base: continue
++        c = d.col[j]; v = W[:, c]
++        Wb[:, c] = v / max(np.min(np.abs(H[d.decoders[j]] @ v)), 1e-300)
++    return H_.scale_to_power(Wb, p)
++
++
+ INITS['core'] = init_core
++INITS['core_bs'] = init_core_bs
+ INITS['core_mf'] = lambda H, d, p: init_core(H, d, p, mf=True)
+ INITS['bn'] = init_bn
+ INITS['zf'] = init_zf
+@@ -587,6 +626,7 @@
+ SEEDS['rule_zf'] = lambda ch, net, d, p: coef_rule(net['Hd'], INITS['zf'](net['Hd'], d, p), ch, d, p)   # earlier start (greedy ZF)
+ SEEDS['rule_mf'] = lambda ch, net, d, p: coef_rule(net['Hd'], INITS['mf'](net['Hd'], d, p), ch, d, p)      # simplified start
+ SEEDS['rule_core'] = lambda ch, net, d, p: coef_rule(net['Hd'], INITS['core'](net['Hd'], d, p), ch, d, p)
++SEEDS['rule_bs'] = lambda ch, net, d, p: coef_rule(net['Hd'], INITS['core_bs'](net['Hd'], d, p), ch, d, p)   # with init='core_bs' (design round v10)
+ SEEDS['rule_core_mf'] = lambda ch, net, d, p: coef_rule(net['Hd'], INITS['core_mf'](net['Hd'], d, p), ch, d, p)
+ SEEDS['rule_eqc'] = lambda ch, net, d, p: coef_rule(net['Hd'], INITS['eqc'](net['Hd'], d, p), ch, d, p)
+ 
+diff -ruN -x __pycache__ orig/discrete_design_v10/code/fronthaul.py discrete_design_v10/code/fronthaul.py
+--- orig/discrete_design_v10/code/fronthaul.py	1970-01-01 00:00:00.000000000 +0000
++++ discrete_design_v10/code/fronthaul.py	2026-10-13 13:21:11.639654994 +0000
+@@ -0,0 +1,81 @@
++"""Discrete design with a BS-specific stream set per BS (design round v10): separable core clusters under the fronthaul.
++
++    design(net, p)          the proposed design (FS)
++    design_1layer(net, p)   its 1-layer RSMA counterpart (FS1): the same selection without group-common streams
++
++1. Core UEs: the order of semi-orthogonal user selection (SUS) on the stacked direct channels (thesis Sec. 4.1).
++2. Core clusters. A core private stream that is carried by m BSs is precoded over Nm antennas and can be nulled at
++   the other core UEs if Nm >= c, c the number of core streams; it occupies one fronthaul slot at each of the m BSs,
++   and every BS keeps one slot for the super-common stream. The design serves the largest number c <= min(K, BN) of
++   core UEs for which the fronthaul can give every core the same number of BSs,
++        m = min(B, floor(B (S_max - 1) / c)),   with   N m >= c,
++   each core UE (in SUS order) being carried by its m strongest BSs (direct-channel gain) that still have a free
++   slot (fewer if fewer BSs have one).
++3. Groups: every other UE joins the core UE with the most correlated direct channel (thesis Sec. 4.1).
++4. Every BS carries the super-common stream and its core private streams, and fills its remaining slots with the
++   group-common streams, then with the private streams of the non-core UEs, each in decreasing order of its
++   direct-channel gain to the weakest decoder of the stream.
++Nothing in it is tuned: c and m follow from N, B, S_max and K; the orders from the direct channels.
++"""
++import numpy as np
++import hrs as H_
++
++
++def _gain(Hd, p):
++    """(K, B): ||f_{b,k}||^2, the direct-channel gain of BS b to UE k."""
++    N = p['N']
++    return np.stack([np.sum(np.abs(Hd[:, b * N:(b + 1) * N]) ** 2, axis=1) for b in range(p['B'])], axis=1)
++
++
++def core_clusters(Hd, p):
++    """Core UEs (SUS order), the BSs that carry each of them, and the cluster size m."""
++    K, B, N, S = p['K'], p['B'], p['N'], p['Smax']
++    g = _gain(Hd, p)
++    order = H_.sus(Hd, p['BN'])[:min(K, p['BN'])]
++    m_of = lambda c: min(B, B * (S - 1) // c)
++    c = max(c for c in range(1, len(order) + 1) if N * m_of(c) >= c)
++    m = m_of(c)
++    load = np.zeros(B, int); carry = {}
++    for k in order[:c]:
++        carry[k] = [b for b in np.argsort(-g[k], kind='stable') if load[b] < S - 1][:m]
++        load[carry[k]] += 1
++    return order[:c], carry, m
++
++
++def design(net, p, groups_on=True, noncore_private=False):
++    Hd = net['Hd']; K, B, S = p['K'], p['B'], p['Smax']
++    g = _gain(Hd, p)
++    C, carry, m = core_clusters(Hd, p)
++    groups = []
++    if groups_on:
++        e = np.sum(np.abs(Hd) ** 2, axis=1); Hn = Hd / np.sqrt(e)[:, None]
++        follow = {a: [] for a in C}
++        for k in range(K):
++            if k not in C:
++                follow[C[int(np.argmax(np.abs(Hn[k] @ Hn[C].conj().T)))]].append(k)
++        groups = [[a] + follow[a] for a in C if follow[a] and len(follow[a]) + 1 < K]
++    G = len(groups)
++    dec = lambda j: groups[j - 1] if j <= G else [j - 1 - G]
++    noncore = [1 + G + k for k in range(K) if k not in C]
++    others = list(range(1, G + 1)) + (noncore if noncore_private else [])          # group-common (non-core private)
++    sets = []
++    for b in range(B):
++        rank = sorted(others, key=lambda j: (j > G, -min(g[k, b] for k in dec(j)), j))
++        sets.append(([0] + [1 + G + k for k in C if b in carry[k]] + rank)[:S])
++    served = sorted(set().union(*map(set, sets)))
++    d = H_.Design(groups, served, K)
++    d.core = list(C); d.rule = 'fronthaul_clusters' + ('' if groups_on else '_1layer'); d.cluster = m
++    d.priority = [0] + [1 + G + k for k in C] + list(range(1, G + 1)) + noncore   # every stream (stream clustering takes it)
++    bm = np.array([[j in sets[b] for j in d.served] for b in range(B)])
++    if not bm.all():
++        d.bsmask = bm; d.bs_sets = [sorted(s) for s in sets]
++    return d
++
++
++def design_1layer(net, p):
++    return design(net, p, groups_on=False)
++
++
++# the first version (FS, FS1): the remaining slots also carry the non-core private streams
++design_fs = lambda net, p: design(net, p, noncore_private=True)
++design_fs_1layer = lambda net, p: design(net, p, groups_on=False, noncore_private=True)
+diff -ruN -x __pycache__ orig/discrete_design_v10/code/perbs.py discrete_design_v10/code/perbs.py
+--- orig/discrete_design_v10/code/perbs.py	1970-01-01 00:00:00.000000000 +0000
++++ discrete_design_v10/code/perbs.py	2026-10-13 10:17:21.854810220 +0000
+@@ -0,0 +1,209 @@
++"""Exploratory BS-specific discrete designs (design round v10). See DESIGN.md for the final one."""
++import numpy as np
++import hrs as H_
++
++
++def _gains(Hd, p):
++    B, N = p['B'], p['N']
++    return np.stack([np.sum(np.abs(Hd[:, b * N:(b + 1) * N]) ** 2, axis=1) for b in range(B)], axis=1)   # (K, B)
++
++
++def _finish(groups, sets, K, B, core, pr, rule):
++    served = sorted(set().union(*map(set, sets)))
++    d = H_.Design(groups, served, K)
++    d.core = list(core); d.priority = list(pr); d.rule = rule
++    bm = np.array([[j in sets[b] for j in d.served] for b in range(B)])
++    if not bm.all():
++        d.bsmask = bm; d.bs_sets = [sorted(s) for s in sets]
++    return d
++
++
++def perbs_rank(net, p, groups_on=True):
++    """V1: SUS cores and nearest-core groups (as the current design); every BS fills its S_max slots in the class order
++    super-common, core privates, group-common, non-core privates, each class sorted by the BS's direct-channel gain to
++    the weakest decoder of the stream."""
++    Hd = net['Hd']; K, B, S = p['K'], p['B'], p['Smax']
++    order, groups, energy, _ = H_.joint_structure(Hd, p, 'sus')
++    if not groups_on: groups = []
++    G = len(groups); g = _gains(Hd, p)
++    dec = lambda j: list(range(K)) if j == 0 else (groups[j - 1] if j <= G else [j - 1 - G])
++    a = lambda j, b: min(g[k, b] for k in dec(j))
++    core_p = [1 + G + k for k in order]
++    grp = [1 + i for i in range(G)]
++    oth = [1 + G + k for k in range(K) if k not in order]
++    sets = []
++    for b in range(B):
++        lst = [0]
++        for cls in (core_p, grp, oth):
++            lst += sorted(cls, key=lambda j: (-a(j, b), j))
++        sets.append(lst[:S])
++    pr = H_.priority_list(order, groups, energy, K, 'private_first') if groups_on else [0] + core_p + sorted(oth, key=lambda j: -energy[j - 1 - G])
++    return _finish(groups, sets, K, B, order, pr, 'perbs_rank')
++
++
++def perbs_rank_1l(net, p):
++    return perbs_rank(net, p, groups_on=False)
++
++
++# --------------------------------------------------------------------------- cell-first family (exploration)
++def _anchor(dec, g):
++    """BS with the largest direct-channel gain to the weakest decoder of a stream."""
++    return int(np.argmax(np.min(g[dec], axis=0)))
++
++
++def cell_first(net, p, groups_on=True, cores='local', order='O1', grouping='global'):
++    """Every UE's anchor is its strongest BS (its cell). Core UEs: 'local' = SUS on each BS's own channel among its
++    cell (at most N per BS), 'global' = SUS on the stacked channel (min(K, BN)). Groups: every non-core UE joins the core
++    with the most correlated channel ('global': stacked channel; 'cell': the cores of its own cell, own-BS channel).
++    Every stream is anchored at the BS with the largest gain to its weakest decoder. BS b carries, in order (first
++    S_max): O1 = c, own cores, own groups, other cores, other groups, non-core privates;
++         O2 = c, own cores, other cores, own groups, other groups, non-core privates;
++         O3 = c, own cores, own groups, own non-core privates, other cores, other groups, other privates.
++    'other' streams by the gain of b to their weakest decoder."""
++    Hd = net['Hd']; K, B, S, N = p['K'], p['B'], p['Smax'], p['N']
++    g = _gains(Hd, p); cell = np.argmax(g, axis=1)
++    if cores == 'global':
++        C = H_.sus(Hd, p['BN'])[:min(K, p['BN'])]
++    else:
++        C = []
++        for b in range(B):
++            U = [k for k in range(K) if cell[k] == b]
++            if U:
++                sel = H_.sus(Hd[U][:, b * N:(b + 1) * N], N)
++                C += [U[i] for i in sel[:min(N, len(U))]]
++    energy = np.sum(np.abs(Hd) ** 2, axis=1)
++    Hn = Hd / np.sqrt(energy)[:, None]
++    follow = {c: [] for c in C}
++    for k in range(K):
++        if k in C: continue
++        if grouping == 'cell':
++            own = [c for c in C if cell[c] == cell[k]] or C
++            b = cell[k]; f = Hd[:, b * N:(b + 1) * N]; fn = f / np.linalg.norm(f, axis=1)[:, None]
++            corr = [abs(fn[k] @ fn[c].conj()) for c in own]
++            follow[own[int(np.argmax(corr))]].append(k)
++        else:
++            corr = np.abs(Hn[k] @ Hn[C].conj().T)
++            follow[C[int(np.argmax(corr))]].append(k)
++    groups = [[c] + follow[c] for c in C if follow[c]] if groups_on else []
++    G = len(groups)
++    dec = lambda j: list(range(K)) if j == 0 else (groups[j - 1] if j <= G else [j - 1 - G])
++    a = lambda j, b: min(g[k, b] for k in dec(j))
++    anc = {j: _anchor(dec(j), g) for j in range(1, 1 + G + K)}
++    core_p = [1 + G + k for k in C]                          # in selection order
++    grp = sorted(range(1, 1 + G), key=lambda j: (-len(dec(j)), j))
++    oth = [1 + G + k for k in range(K) if k not in C]
++    sets = []
++    for b in range(B):
++        own = lambda L: [j for j in L if anc[j] == b]
++        other = lambda L: sorted([j for j in L if anc[j] != b], key=lambda j: (-a(j, b), j))
++        bya = lambda L: sorted(L, key=lambda j: (-a(j, b), j))
++        if order == 'O1':
++            lst = [0] + own(core_p) + own(grp) + other(core_p) + other(grp) + bya(oth)
++        elif order == 'O2':
++            lst = [0] + own(core_p) + other(core_p) + own(grp) + other(grp) + bya(oth)
++        elif order == 'O3':
++            lst = [0] + own(core_p) + own(grp) + bya(own(oth)) + other(core_p) + other(grp) + other(oth)
++        sets.append(lst[:S])
++    pr = [0] + core_p + grp + sorted(oth, key=lambda j: -energy[j - 1 - G])
++    return _finish(groups, sets, K, B, C, pr, f'cell_first_{cores}_{order}_{grouping}')
++
++
++# --------------------------------------------------------------------------- QoS-feasibility switch (exploration)
++def common_capacity(Hd, p):
++    """Largest rate a single stream decodable by every UE can have (all BSs at full power, co-phased MRT per BS):
++    log2(1 + P_max min_k (sum_b ||f_{b,k}||)^2)."""
++    B, N = p['B'], p['N']
++    amp = np.stack([np.linalg.norm(Hd[:, b * N:(b + 1) * N], axis=1) for b in range(B)], axis=1)
++    return float(np.log2(1 + p['Pmax'] * np.min(amp.sum(1)) ** 2))
++
++
++def perbs_feas(net, p, always=False):
++    """V1, but every BS puts the group-common streams first (c, groups, cores, non-core privates) when the 1-layer
++    set of V1 cannot meet the QoS: the UEs without a private stream need (count) x R_th from the super-common stream,
++    more than common_capacity."""
++    d1 = perbs_rank(net, p, groups_on=False)
++    U = p['K'] - len(d1.private_served)
++    if not always and U * p['Rth'] <= common_capacity(net['Hd'], p):
++        d = perbs_rank(net, p); d.rule = 'perbs_feas(private_first)'; return d
++    Hd = net['Hd']; K, B, S = p['K'], p['B'], p['Smax']
++    order, groups, energy, _ = H_.joint_structure(Hd, p, 'sus')
++    G = len(groups); g = _gains(Hd, p)
++    dec = lambda j: list(range(K)) if j == 0 else (groups[j - 1] if j <= G else [j - 1 - G])
++    a = lambda j, b: min(g[k, b] for k in dec(j))
++    core_p = [1 + G + k for k in order]; grp = [1 + i for i in range(G)]
++    oth = [1 + G + k for k in range(K) if k not in order]
++    sets = []
++    for b in range(B):
++        lst = [0]
++        for cls in (grp, core_p, oth):
++            lst += sorted(cls, key=lambda j: (-a(j, b), j))
++        sets.append(lst[:S])
++    pr = H_.priority_list(order, groups, energy, K, 'group_first')
++    return _finish(groups, sets, K, B, order, pr, 'perbs_feas(group_first)')
++
++
++def perbs_groupfirst(net, p):
++    return perbs_feas(net, p, always=True)
++
++
++# --------------------------------------------------------------------------- separable cores under the fronthaul (exploration)
++def dof_design(net, p, groups_on=True, support=False, even=False):
++    """Core UEs in SUS order. The number of core streams is the largest c <= min(K, BN) that the fronthaul can carry
++    with enough antennas to separate them: each core stream is carried by m = ceil(c / N) BSs (N m >= c antennas, so
++    that it can be nulled at the other c - 1 cores), c m <= B (S_max - 1). Each core goes to its m strongest BSs that
++    still have a free slot (SUS order). Groups: nearest core (thesis). The other slots of every BS: group-common streams,
++    then non-core private streams, by the BS's gain to their weakest decoder (support=True: then the other cores)."""
++    Hd = net['Hd']; K, B, S, N = p['K'], p['B'], p['Smax'], p['N']
++    g = _gains(Hd, p)
++    order = H_.sus(Hd, p['BN'])[:min(K, p['BN'])]
++    c = len(order)
++    while True:
++        m = -(-c // N)
++        if m <= B and c * m <= B * (S - 1) and even:
++            m = min(B, B * (S - 1) // c)
++        if m <= B and c * m <= B * (S - 1):
++            load = np.zeros(B, int); carry = {}
++            ok = True
++            for k in order[:c]:
++                bs = [b for b in np.argsort(-g[k], kind='stable') if load[b] < S - 1][:m]
++                if len(bs) < m: ok = False; break
++                carry[k] = bs; load[bs] += 1
++            if ok: break
++        c -= 1
++    C = order[:c]
++    energy = np.sum(np.abs(Hd) ** 2, axis=1)
++    Hn = Hd / np.sqrt(energy)[:, None]
++    follow = {a: [] for a in C}
++    for k in range(K):
++        if k in C: continue
++        follow[C[int(np.argmax(np.abs(Hn[k] @ Hn[C].conj().T)))]].append(k)
++    groups = [[a] + follow[a] for a in C if follow[a] and len(follow[a]) + 1 < K] if groups_on else []
++    G = len(groups)
++    dec = lambda j: list(range(K)) if j == 0 else (groups[j - 1] if j <= G else [j - 1 - G])
++    a_ = lambda j, b: min(g[k, b] for k in dec(j))
++    grp = [1 + i for i in range(G)]
++    oth = [1 + G + k for k in range(K) if k not in C]
++    sets = []
++    for b in range(B):
++        own = [1 + G + k for k in C if b in carry[k]]
++        rest = sorted(grp, key=lambda j: (-a_(j, b), j)) + sorted(oth, key=lambda j: (-a_(j, b), j))
++        if support:
++            rest = sorted(grp, key=lambda j: (-a_(j, b), j)) + sorted([1 + G + k for k in C if b not in carry[k]], key=lambda j: (-a_(j, b), j)) \
++                + sorted(oth, key=lambda j: (-a_(j, b), j))
++        sets.append(([0] + own + rest)[:S])
++    pr = [0] + [1 + G + k for k in C] + grp + sorted(oth, key=lambda j: -energy[j - 1 - G])
++    d = _finish(groups, sets, K, B, C, pr, 'dof')
++    d.n_core, d.cluster = c, m
++    return d
++
++
++def dof_design_1l(net, p):
++    return dof_design(net, p, groups_on=False)
++
++
++def dof_even(net, p):
++    return dof_design(net, p, even=True)
++
++
++def dof_even_1l(net, p):
++    return dof_design(net, p, groups_on=False, even=True)
+diff -ruN -x __pycache__ orig/discrete_design_v10/code/perbs_v.py discrete_design_v10/code/perbs_v.py
+--- orig/discrete_design_v10/code/perbs_v.py	1970-01-01 00:00:00.000000000 +0000
++++ discrete_design_v10/code/perbs_v.py	2026-10-13 05:13:24.066053387 +0000
+@@ -0,0 +1,8 @@
++"""Exploration variants (thin wrappers)."""
++import perbs as P
++c1 = lambda net, p: P.cell_first(net, p, True, 'local', 'O1')
++c1_1l = lambda net, p: P.cell_first(net, p, False, 'local', 'O1')
++c2 = lambda net, p: P.cell_first(net, p, True, 'local', 'O2')
++c2_1l = lambda net, p: P.cell_first(net, p, False, 'local', 'O2')
++c3 = lambda net, p: P.cell_first(net, p, True, 'global', 'O1')
++c3_1l = lambda net, p: P.cell_first(net, p, False, 'global', 'O1')
+diff -ruN -x __pycache__ orig/discrete_design_v10/harness/variants.py discrete_design_v10/harness/variants.py
+--- orig/discrete_design_v10/harness/variants.py	2026-10-13 00:58:16.000000000 +0000
++++ discrete_design_v10/harness/variants.py	2026-10-13 13:21:11.640270423 +0000
+@@ -19,4 +19,26 @@
+ VARIANTS = {
+     'JH': dict(design='discrete:current', one_layer='J1'),
+     'J1': dict(design='discrete:current_1layer'),
++    'V1': dict(design='perbs:perbs_rank', one_layer='V11'),
++    'V11': dict(design='perbs:perbs_rank_1l'),
++    'C1': dict(design='perbs_v:c1', one_layer='C11'),
++    'C11': dict(design='perbs_v:c1_1l'),
++    'C2': dict(design='perbs_v:c2', one_layer='C21'),
++    'C21': dict(design='perbs_v:c2_1l'),
++    'C3': dict(design='perbs_v:c3', one_layer='C31'),
++    'C31': dict(design='perbs_v:c3_1l'),
++    'V1b': dict(design='perbs:perbs_rank', one_layer='V1b1', opt=dict(init='core_bs', seed='rule_bs')),
++    'V1b1': dict(design='perbs:perbs_rank_1l', opt=dict(init='core_bs', seed='rule_bs')),
++    'F1': dict(design='perbs:perbs_feas', one_layer='V11'),
++    'GF': dict(design='perbs:perbs_groupfirst', one_layer='V11'),
++    'D': dict(design='perbs:dof_design', one_layer='D1'),
++    'D1': dict(design='perbs:dof_design_1l'),
++    'E': dict(design='perbs:dof_even', one_layer='E1'),
++    'E1': dict(design='perbs:dof_even_1l'),
++    # the proposed design of round v10 (code/fronthaul.py); identical designs to E/E1 (checked on the grid, bench, smax)
++    'FS': dict(design='fronthaul:design_fs', one_layer='FS1'),
++    'FS1': dict(design='fronthaul:design_fs_1layer'),
++    # the proposed design (P) and its 1-layer RSMA (P1): FS without non-core private streams
++    'P': dict(design='fronthaul:design', one_layer='P1'),
++    'P1': dict(design='fronthaul:design_1layer'),
+ }
+diff -ruN -x __pycache__ orig/discrete_design_v10/tools/large_network.py discrete_design_v10/tools/large_network.py
+--- orig/discrete_design_v10/tools/large_network.py	1970-01-01 00:00:00.000000000 +0000
++++ discrete_design_v10/tools/large_network.py	2026-10-13 13:00:14.227761203 +0000
+@@ -0,0 +1,57 @@
++"""How the design FS (code/fronthaul.py) associates streams with BSs in a large network of scattered BSs (no
++simulation: the discrete design only, from the direct channels of the thesis channel model).
++
++    python3 tools/large_network.py
++
++Networks: B BSs at jittered grid positions over an L x L area (height 15 m), K UEs uniform (height 1.5 m), N antennas,
++the channel constants of the thesis (code/hrs.py). For each S_max: the number c of core UEs, the cluster size m (BSs
++per core UE), the number of BSs carrying each core (min / mean / max), how many BSs carry a core of their own (a core
++carried by that BS only) or share it, the group-common and non-core private streams and how many distinct BSs carry
++them, and the distinct streams per BS.
++"""
++import os, sys, math
++import numpy as np
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++sys.path.insert(0, os.path.join(ROOT, 'code'))
++import hrs as H_, run as R, fronthaul as F, discrete as DC
++
++
++def network(B, K, N, L, seed):
++    rng = np.random.default_rng(seed)
++    side = int(math.ceil(math.sqrt(B)))
++    cells = [((i + 0.5) * L / side, (j + 0.5) * L / side) for i in range(side) for j in range(side)][:B]
++    BS = np.array([(x + rng.uniform(-0.2, 0.2) * L / side, y + rng.uniform(-0.2, 0.2) * L / side, 15.0) for x, y in cells])
++    UE = np.column_stack([rng.uniform(0, L, K), rng.uniform(0, L, K), np.full(K, 1.5)])
++    p = H_.params(K=K, N=N, M=100, Smax=4, B=B, bank=R.BANK)
++    k0 = 2 * math.pi / p['lam']
++    Hd = np.zeros((K, B * N), complex)
++    for k in range(K):
++        for b in range(B):
++            v = UE[k] - BS[b]; d = np.linalg.norm(v)
++            a = np.exp(1j * k0 * p['uBS'] @ (v / d))
++            Hd[k, b * N:(b + 1) * N] = math.sqrt(p['PL0'] / p['noise']) * d ** (-p['alpha'] / 2) * np.exp(-1j * k0 * d) * a
++    return dict(BS=BS, UE=UE, Hd=Hd), p
++
++
++def describe(net, p):
++    d = F.design(net, p); DC.check(d, p)
++    B, G, K = p['B'], d.G, p['K']
++    bm = d.bsmask if d.bsmask is not None else np.ones((B, d.nS), bool)
++    nb = {j: int(bm[:, d.col[j]].sum()) for j in d.served}
++    cores = [1 + G + k for k in d.core if (1 + G + k) in d.col]
++    own = sum(1 for j in cores if nb[j] == 1)
++    grp = [j for j in d.served if 1 <= j <= G]; ncp = [j for j in d.served if j > G and (j - 1 - G) not in d.core]
++    cb = [nb[j] for j in cores]
++    return (f"S_max={p['Smax']:2d}: c={len(d.core):3d} core UEs, m={d.cluster:2d}; BSs per core min/mean/max "
++            f"{min(cb)}/{np.mean(cb):.1f}/{max(cb)} ({own} cores carried by one BS only, {len(cores) - own} by several); "
++            f"group-common {len(grp)} of {G} (BSs each {np.mean([nb[j] for j in grp]) if grp else 0:.1f}), "
++            f"non-core private {len(ncp)}; distinct streams {d.nS}, per BS {int(bm.sum(1).min())}..{int(bm.sum(1).max())}")
++
++
++if __name__ == '__main__':
++    for B, K, N, L in [(2, 16, 3, 100), (3, 16, 3, 100), (9, 36, 4, 300), (16, 64, 4, 600), (25, 100, 4, 1000)]:
++        net, p = network(B, K, N, L, seed=B * 1000 + K)
++        print(f'\n== B = {B} BSs over {L} m x {L} m, K = {K} UEs, N = {N}')
++        for S in sorted({N + 1, 2 * N, 3 * N, 4 * N, 8 * N}):
++            p['Smax'] = S
++            print('  ' + describe(net, p))
+diff -ruN -x __pycache__ orig/discrete_design_v10/tools/summary_screen.py discrete_design_v10/tools/summary_screen.py
+--- orig/discrete_design_v10/tools/summary_screen.py	1970-01-01 00:00:00.000000000 +0000
++++ discrete_design_v10/tools/summary_screen.py	2026-10-13 13:04:53.212988866 +0000
+@@ -0,0 +1,22 @@
++"""Compact Q = 5 screen summary of the variants tried (design round v10): per scenario and R_th, the mean rate of the
++variant, its paired difference to its 1-layer counterpart and to J (J derived from JH and J1 as in tools/report.py).
++    python3 tools/summary_screen.py V1 C1 C3 GF D E ..."""
++import os, sys, json
++import numpy as np
++ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
++sys.path.insert(0, os.path.join(ROOT, 'harness')); sys.path.insert(0, os.path.join(ROOT, 'tools'))
++import variants as V, report as RP
++
++for X in sys.argv[1:]:
++    X1 = V.VARIANTS[X].get('one_layer')
++    print(f'\n{X} (1-layer: {X1})')
++    for sc in ('T2', 'E3'):
++        d = {n: RP.load(n, 5).get(sc, {}) for n in (X, X1, 'JH', 'J1')}
++        keys = set(d[X]) & set(d[X1]) & set(d['JH']) & set(d['J1'])
++        row = []
++        for R in RP_RTH if (RP_RTH := (0.0, 0.5, 1.0, 1.5, 2.0, 2.5)) else ():
++            ks = [k for k in keys if k[2] == R]
++            a = [d[X][k]['rate'] - d[X1][k]['rate'] for k in ks]
++            j = [d[X][k]['rate'] - RP.derive_j(d['JH'][k], d['J1'][k])['rate'] for k in ks]
++            row.append(f'{np.mean([d[X][k]["rate"] for k in ks]):6.1f} ({np.mean(a):+5.2f}±{np.std(a, ddof=1) / np.sqrt(len(a)):4.2f}; J {np.mean(j):+6.2f})')
++        print(f'  {sc} n={len(keys)}: ' + ' | '.join(row))
