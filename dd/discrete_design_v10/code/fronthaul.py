@@ -42,7 +42,7 @@ def core_clusters(Hd, p):
     return order[:c], carry, m
 
 
-def design(net, p, groups_on=True):
+def design(net, p, groups_on=True, noncore_private=False):
     Hd = net['Hd']; K, B, S = p['K'], p['B'], p['Smax']
     g = _gain(Hd, p)
     C, carry, m = core_clusters(Hd, p)
@@ -56,7 +56,8 @@ def design(net, p, groups_on=True):
         groups = [[a] + follow[a] for a in C if follow[a] and len(follow[a]) + 1 < K]
     G = len(groups)
     dec = lambda j: groups[j - 1] if j <= G else [j - 1 - G]
-    others = list(range(1, G + 1)) + [1 + G + k for k in range(K) if k not in C]   # group-common, non-core private
+    noncore = [1 + G + k for k in range(K) if k not in C]
+    others = list(range(1, G + 1)) + (noncore if noncore_private else [])          # group-common (non-core private)
     sets = []
     for b in range(B):
         rank = sorted(others, key=lambda j: (j > G, -min(g[k, b] for k in dec(j)), j))
@@ -64,7 +65,7 @@ def design(net, p, groups_on=True):
     served = sorted(set().union(*map(set, sets)))
     d = H_.Design(groups, served, K)
     d.core = list(C); d.rule = 'fronthaul_clusters' + ('' if groups_on else '_1layer'); d.cluster = m
-    d.priority = [0] + [1 + G + k for k in C] + others          # (stream clustering on this design takes this order)
+    d.priority = [0] + [1 + G + k for k in C] + list(range(1, G + 1)) + noncore   # every stream (stream clustering takes it)
     bm = np.array([[j in sets[b] for j in d.served] for b in range(B)])
     if not bm.all():
         d.bsmask = bm; d.bs_sets = [sorted(s) for s in sets]
@@ -73,3 +74,8 @@ def design(net, p, groups_on=True):
 
 def design_1layer(net, p):
     return design(net, p, groups_on=False)
+
+
+# the first version (FS, FS1): the remaining slots also carry the non-core private streams
+design_fs = lambda net, p: design(net, p, noncore_private=True)
+design_fs_1layer = lambda net, p: design(net, p, groups_on=False, noncore_private=True)

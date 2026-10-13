@@ -36,6 +36,9 @@ VARIANTS = {
     'E': dict(design='perbs:dof_even', one_layer='E1'),
     'E1': dict(design='perbs:dof_even_1l'),
     # the proposed design of round v10 (code/fronthaul.py); identical designs to E/E1 (checked on the grid, bench, smax)
-    'FS': dict(design='fronthaul:design', one_layer='FS1'),
-    'FS1': dict(design='fronthaul:design_1layer'),
+    'FS': dict(design='fronthaul:design_fs', one_layer='FS1'),
+    'FS1': dict(design='fronthaul:design_fs_1layer'),
+    # the proposed design (P) and its 1-layer RSMA (P1): FS without non-core private streams
+    'P': dict(design='fronthaul:design', one_layer='P1'),
+    'P1': dict(design='fronthaul:design_1layer'),
 }
