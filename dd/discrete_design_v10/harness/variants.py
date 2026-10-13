@@ -30,4 +30,5 @@ VARIANTS = {
     'V1b': dict(design='perbs:perbs_rank', one_layer='V1b1', opt=dict(init='core_bs', seed='rule_bs')),
     'V1b1': dict(design='perbs:perbs_rank_1l', opt=dict(init='core_bs', seed='rule_bs')),
     'F1': dict(design='perbs:perbs_feas', one_layer='V11'),
+    'GF': dict(design='perbs:perbs_groupfirst', one_layer='V11'),
 }

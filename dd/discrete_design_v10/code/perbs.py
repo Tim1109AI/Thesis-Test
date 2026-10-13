@@ -117,13 +117,13 @@ def common_capacity(Hd, p):
     return float(np.log2(1 + p['Pmax'] * np.min(amp.sum(1)) ** 2))
 
 
-def perbs_feas(net, p):
+def perbs_feas(net, p, always=False):
     """V1, but every BS puts the group-common streams first (c, groups, cores, non-core privates) when the 1-layer
     set of V1 cannot meet the QoS: the UEs without a private stream need (count) x R_th from the super-common stream,
     more than common_capacity."""
     d1 = perbs_rank(net, p, groups_on=False)
     U = p['K'] - len(d1.private_served)
-    if U * p['Rth'] <= common_capacity(net['Hd'], p):
+    if not always and U * p['Rth'] <= common_capacity(net['Hd'], p):
         d = perbs_rank(net, p); d.rule = 'perbs_feas(private_first)'; return d
     Hd = net['Hd']; K, B, S = p['K'], p['B'], p['Smax']
     order, groups, energy, _ = H_.joint_structure(Hd, p, 'sus')
@@ -140,3 +140,7 @@ def perbs_feas(net, p):
         sets.append(lst[:S])
     pr = H_.priority_list(order, groups, energy, K, 'group_first')
     return _finish(groups, sets, K, B, order, pr, 'perbs_feas(group_first)')
+
+
+def perbs_groupfirst(net, p):
+    return perbs_feas(net, p, always=True)
