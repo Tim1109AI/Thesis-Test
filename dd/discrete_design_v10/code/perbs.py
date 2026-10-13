@@ -144,3 +144,56 @@ def perbs_feas(net, p, always=False):
 
 def perbs_groupfirst(net, p):
     return perbs_feas(net, p, always=True)
+
+
+# --------------------------------------------------------------------------- separable cores under the fronthaul (exploration)
+def dof_design(net, p, groups_on=True, support=False):
+    """Core UEs in SUS order. The number of core streams is the largest c <= min(K, BN) that the fronthaul can carry
+    with enough antennas to separate them: each core stream is carried by m = ceil(c / N) BSs (N m >= c antennas, so
+    that it can be nulled at the other c - 1 cores), c m <= B (S_max - 1). Each core goes to its m strongest BSs that
+    still have a free slot (SUS order). Groups: nearest core (thesis). The other slots of every BS: group-common streams,
+    then non-core private streams, by the BS's gain to their weakest decoder (support=True: then the other cores)."""
+    Hd = net['Hd']; K, B, S, N = p['K'], p['B'], p['Smax'], p['N']
+    g = _gains(Hd, p)
+    order = H_.sus(Hd, p['BN'])[:min(K, p['BN'])]
+    c = len(order)
+    while True:
+        m = -(-c // N)
+        if m <= B and c * m <= B * (S - 1):
+            load = np.zeros(B, int); carry = {}
+            ok = True
+            for k in order[:c]:
+                bs = [b for b in np.argsort(-g[k], kind='stable') if load[b] < S - 1][:m]
+                if len(bs) < m: ok = False; break
+                carry[k] = bs; load[bs] += 1
+            if ok: break
+        c -= 1
+    C = order[:c]
+    energy = np.sum(np.abs(Hd) ** 2, axis=1)
+    Hn = Hd / np.sqrt(energy)[:, None]
+    follow = {a: [] for a in C}
+    for k in range(K):
+        if k in C: continue
+        follow[C[int(np.argmax(np.abs(Hn[k] @ Hn[C].conj().T)))]].append(k)
+    groups = [[a] + follow[a] for a in C if follow[a] and len(follow[a]) + 1 < K] if groups_on else []
+    G = len(groups)
+    dec = lambda j: list(range(K)) if j == 0 else (groups[j - 1] if j <= G else [j - 1 - G])
+    a_ = lambda j, b: min(g[k, b] for k in dec(j))
+    grp = [1 + i for i in range(G)]
+    oth = [1 + G + k for k in range(K) if k not in C]
+    sets = []
+    for b in range(B):
+        own = [1 + G + k for k in C if b in carry[k]]
+        rest = sorted(grp, key=lambda j: (-a_(j, b), j)) + sorted(oth, key=lambda j: (-a_(j, b), j))
+        if support:
+            rest = sorted(grp, key=lambda j: (-a_(j, b), j)) + sorted([1 + G + k for k in C if b not in carry[k]], key=lambda j: (-a_(j, b), j)) \
+                + sorted(oth, key=lambda j: (-a_(j, b), j))
+        sets.append(([0] + own + rest)[:S])
+    pr = [0] + [1 + G + k for k in C] + grp + sorted(oth, key=lambda j: -energy[j - 1 - G])
+    d = _finish(groups, sets, K, B, C, pr, 'dof')
+    d.n_core, d.cluster = c, -(-c // N)
+    return d
+
+
+def dof_design_1l(net, p):
+    return dof_design(net, p, groups_on=False)

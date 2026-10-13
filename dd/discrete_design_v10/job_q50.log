@@ -1,0 +1,9 @@
+V1__T2: 24 runs to do (0 done) -> /home/user/Thesis-Test/dd/discrete_design_v10/results/V1__T2.jsonl
+V1__E3: 24 runs to do (0 done) -> /home/user/Thesis-Test/dd/discrete_design_v10/results/V1__E3.jsonl
+  [1/48] T2 a drop 901 R_th 0: rate 93.92, 11 streams  (27 CPU-s, 29 s elapsed)
+  [2/48] T2 a drop 901 R_th 1: rate 93.92, 11 streams  (27 CPU-s, 29 s elapsed)
+  [3/48] T2 a drop 901 R_th 0.5: rate 93.92, 11 streams  (27 CPU-s, 30 s elapsed)
+  [4/48] T2 a drop 901 R_th 1.5: rate 93.92, 11 streams  (27 CPU-s, 30 s elapsed)
+  [5/48] T2 a drop 901 R_th 2: rate 99.34, 11 streams  (28 CPU-s, 58 s elapsed)
+  [6/48] T2 a drop 901 R_th 2.5: rate 101.07, 11 streams  (35 CPU-s, 64 s elapsed)
+  [7/48] T2 f drop 901 R_th 0.5: rate 137.09, 21 streams BS-specific  (266 CPU-s, 317 s elapsed)
