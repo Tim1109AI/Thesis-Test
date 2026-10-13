@@ -1,0 +1,7 @@
+JH_T2               : identical trace: True  rate 126.9181  [27 CPU-s]
+J1_T2               : identical trace: True  rate 128.7293  [17 CPU-s]
+JH_E3               : identical trace: True  rate 166.6123  [22 CPU-s]
+rand_fronthaul_E3   : identical trace: True  rate 45.1868  [32 CPU-s]
+sparse_bf_T2        : identical trace: True  rate 73.6943  [82 CPU-s]
+J_T2 (derived)      : equals the thesis framework run with the stream-set test: True
+SELFTEST PASSED
