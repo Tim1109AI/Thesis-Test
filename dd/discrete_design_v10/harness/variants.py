@@ -35,4 +35,7 @@ VARIANTS = {
     'D1': dict(design='perbs:dof_design_1l'),
     'E': dict(design='perbs:dof_even', one_layer='E1'),
     'E1': dict(design='perbs:dof_even_1l'),
+    # the proposed design of round v10 (code/fronthaul.py); identical designs to E/E1 (checked on the grid, bench, smax)
+    'FS': dict(design='fronthaul:design', one_layer='FS1'),
+    'FS1': dict(design='fronthaul:design_1layer'),
 }
