@@ -1,3 +1,4 @@
 dd/orig/
 *.pid
 __pycache__/
+dd/discrete_design_v10/job_*.log
