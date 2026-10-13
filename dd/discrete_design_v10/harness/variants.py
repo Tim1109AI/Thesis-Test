@@ -33,4 +33,6 @@ VARIANTS = {
     'GF': dict(design='perbs:perbs_groupfirst', one_layer='V11'),
     'D': dict(design='perbs:dof_design', one_layer='D1'),
     'D1': dict(design='perbs:dof_design_1l'),
+    'E': dict(design='perbs:dof_even', one_layer='E1'),
+    'E1': dict(design='perbs:dof_even_1l'),
 }

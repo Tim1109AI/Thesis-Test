@@ -147,7 +147,7 @@ def perbs_groupfirst(net, p):
 
 
 # --------------------------------------------------------------------------- separable cores under the fronthaul (exploration)
-def dof_design(net, p, groups_on=True, support=False):
+def dof_design(net, p, groups_on=True, support=False, even=False):
     """Core UEs in SUS order. The number of core streams is the largest c <= min(K, BN) that the fronthaul can carry
     with enough antennas to separate them: each core stream is carried by m = ceil(c / N) BSs (N m >= c antennas, so
     that it can be nulled at the other c - 1 cores), c m <= B (S_max - 1). Each core goes to its m strongest BSs that
@@ -159,6 +159,8 @@ def dof_design(net, p, groups_on=True, support=False):
     c = len(order)
     while True:
         m = -(-c // N)
+        if m <= B and c * m <= B * (S - 1) and even:
+            m = min(B, B * (S - 1) // c)
         if m <= B and c * m <= B * (S - 1):
             load = np.zeros(B, int); carry = {}
             ok = True
@@ -191,9 +193,17 @@ def dof_design(net, p, groups_on=True, support=False):
         sets.append(([0] + own + rest)[:S])
     pr = [0] + [1 + G + k for k in C] + grp + sorted(oth, key=lambda j: -energy[j - 1 - G])
     d = _finish(groups, sets, K, B, C, pr, 'dof')
-    d.n_core, d.cluster = c, -(-c // N)
+    d.n_core, d.cluster = c, m
     return d
 
 
 def dof_design_1l(net, p):
     return dof_design(net, p, groups_on=False)
+
+
+def dof_even(net, p):
+    return dof_design(net, p, even=True)
+
+
+def dof_even_1l(net, p):
+    return dof_design(net, p, groups_on=False, even=True)
