@@ -10,7 +10,7 @@
    core UEs for which the fronthaul can give every core the same number of BSs,
         m = min(B, floor(B (S_max - 1) / c)),   with   N m >= c,
    each core UE (in SUS order) being carried by its m strongest BSs (direct-channel gain) that still have a free
-   slot; c is reduced while this is impossible.
+   slot (fewer if fewer BSs have one).
 3. Groups: every other UE joins the core UE with the most correlated direct channel (thesis Sec. 4.1).
 4. Every BS carries the super-common stream and its core private streams, and fills its remaining slots with the
    group-common streams, then with the private streams of the non-core UEs, each in decreasing order of its
@@ -32,19 +32,14 @@ def core_clusters(Hd, p):
     K, B, N, S = p['K'], p['B'], p['N'], p['Smax']
     g = _gain(Hd, p)
     order = H_.sus(Hd, p['BN'])[:min(K, p['BN'])]
-    for c in range(len(order), 0, -1):
-        m = min(B, B * (S - 1) // c)
-        if N * m < c:
-            continue
-        load = np.zeros(B, int); carry = {}
-        for k in order[:c]:
-            bs = [b for b in np.argsort(-g[k], kind='stable') if load[b] < S - 1][:m]
-            if len(bs) < m:
-                break
-            carry[k] = bs; load[bs] += 1
-        else:
-            return order[:c], carry, m
-    raise ValueError('no core UE can be served')
+    m_of = lambda c: min(B, B * (S - 1) // c)
+    c = max(c for c in range(1, len(order) + 1) if N * m_of(c) >= c)
+    m = m_of(c)
+    load = np.zeros(B, int); carry = {}
+    for k in order[:c]:
+        carry[k] = [b for b in np.argsort(-g[k], kind='stable') if load[b] < S - 1][:m]
+        load[carry[k]] += 1
+    return order[:c], carry, m
 
 
 def design(net, p, groups_on=True):
