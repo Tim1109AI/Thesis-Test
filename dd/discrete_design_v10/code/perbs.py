@@ -106,3 +106,37 @@ def cell_first(net, p, groups_on=True, cores='local', order='O1', grouping='glob
         sets.append(lst[:S])
     pr = [0] + core_p + grp + sorted(oth, key=lambda j: -energy[j - 1 - G])
     return _finish(groups, sets, K, B, C, pr, f'cell_first_{cores}_{order}_{grouping}')
+
+
+# --------------------------------------------------------------------------- QoS-feasibility switch (exploration)
+def common_capacity(Hd, p):
+    """Largest rate a single stream decodable by every UE can have (all BSs at full power, co-phased MRT per BS):
+    log2(1 + P_max min_k (sum_b ||f_{b,k}||)^2)."""
+    B, N = p['B'], p['N']
+    amp = np.stack([np.linalg.norm(Hd[:, b * N:(b + 1) * N], axis=1) for b in range(B)], axis=1)
+    return float(np.log2(1 + p['Pmax'] * np.min(amp.sum(1)) ** 2))
+
+
+def perbs_feas(net, p):
+    """V1, but every BS puts the group-common streams first (c, groups, cores, non-core privates) when the 1-layer
+    set of V1 cannot meet the QoS: the UEs without a private stream need (count) x R_th from the super-common stream,
+    more than common_capacity."""
+    d1 = perbs_rank(net, p, groups_on=False)
+    U = p['K'] - len(d1.private_served)
+    if U * p['Rth'] <= common_capacity(net['Hd'], p):
+        d = perbs_rank(net, p); d.rule = 'perbs_feas(private_first)'; return d
+    Hd = net['Hd']; K, B, S = p['K'], p['B'], p['Smax']
+    order, groups, energy, _ = H_.joint_structure(Hd, p, 'sus')
+    G = len(groups); g = _gains(Hd, p)
+    dec = lambda j: list(range(K)) if j == 0 else (groups[j - 1] if j <= G else [j - 1 - G])
+    a = lambda j, b: min(g[k, b] for k in dec(j))
+    core_p = [1 + G + k for k in order]; grp = [1 + i for i in range(G)]
+    oth = [1 + G + k for k in range(K) if k not in order]
+    sets = []
+    for b in range(B):
+        lst = [0]
+        for cls in (grp, core_p, oth):
+            lst += sorted(cls, key=lambda j: (-a(j, b), j))
+        sets.append(lst[:S])
+    pr = H_.priority_list(order, groups, energy, K, 'group_first')
+    return _finish(groups, sets, K, B, order, pr, 'perbs_feas(group_first)')
