@@ -1,0 +1,35 @@
+
+== B = 2 BSs over 100 m x 100 m, K = 16 UEs, N = 3
+  S_max= 4: c=  3 core UEs, m= 2; BSs per core min/mean/max 2/2.0/2 (0 cores carried by one BS only, 3 by several); group-common 0 of 3 (BSs each 0.0), non-core private 0; distinct streams 4, per BS 4..4
+  S_max= 6: c=  5 core UEs, m= 2; BSs per core min/mean/max 2/2.0/2 (0 cores carried by one BS only, 5 by several); group-common 0 of 3 (BSs each 0.0), non-core private 0; distinct streams 6, per BS 6..6
+  S_max= 9: c=  6 core UEs, m= 2; BSs per core min/mean/max 2/2.0/2 (0 cores carried by one BS only, 6 by several); group-common 3 of 4 (BSs each 1.3), non-core private 0; distinct streams 10, per BS 9..9
+  S_max=12: c=  6 core UEs, m= 2; BSs per core min/mean/max 2/2.0/2 (0 cores carried by one BS only, 6 by several); group-common 4 of 4 (BSs each 2.0), non-core private 0; distinct streams 11, per BS 11..11
+  S_max=24: c=  6 core UEs, m= 2; BSs per core min/mean/max 2/2.0/2 (0 cores carried by one BS only, 6 by several); group-common 4 of 4 (BSs each 2.0), non-core private 0; distinct streams 11, per BS 11..11
+
+== B = 3 BSs over 100 m x 100 m, K = 16 UEs, N = 3
+  S_max= 4: c=  4 core UEs, m= 2; BSs per core min/mean/max 2/2.0/2 (0 cores carried by one BS only, 4 by several); group-common 1 of 3 (BSs each 1.0), non-core private 0; distinct streams 6, per BS 4..4
+  S_max= 6: c=  6 core UEs, m= 2; BSs per core min/mean/max 2/2.0/2 (0 cores carried by one BS only, 6 by several); group-common 3 of 5 (BSs each 1.0), non-core private 0; distinct streams 10, per BS 6..6
+  S_max= 9: c=  8 core UEs, m= 3; BSs per core min/mean/max 3/3.0/3 (0 cores carried by one BS only, 8 by several); group-common 0 of 5 (BSs each 0.0), non-core private 0; distinct streams 9, per BS 9..9
+  S_max=12: c=  9 core UEs, m= 3; BSs per core min/mean/max 3/3.0/3 (0 cores carried by one BS only, 9 by several); group-common 5 of 5 (BSs each 1.2), non-core private 0; distinct streams 15, per BS 12..12
+  S_max=24: c=  9 core UEs, m= 3; BSs per core min/mean/max 3/3.0/3 (0 cores carried by one BS only, 9 by several); group-common 5 of 5 (BSs each 3.0), non-core private 0; distinct streams 15, per BS 15..15
+
+== B = 9 BSs over 300 m x 300 m, K = 36 UEs, N = 4
+  S_max= 5: c= 12 core UEs, m= 3; BSs per core min/mean/max 3/3.0/3 (0 cores carried by one BS only, 12 by several); group-common 0 of 7 (BSs each 0.0), non-core private 0; distinct streams 13, per BS 5..5
+  S_max= 8: c= 15 core UEs, m= 4; BSs per core min/mean/max 4/4.0/4 (0 cores carried by one BS only, 15 by several); group-common 3 of 9 (BSs each 1.0), non-core private 0; distinct streams 19, per BS 8..8
+  S_max=12: c= 19 core UEs, m= 5; BSs per core min/mean/max 5/5.0/5 (0 cores carried by one BS only, 19 by several); group-common 4 of 9 (BSs each 1.0), non-core private 0; distinct streams 24, per BS 12..12
+  S_max=16: c= 22 core UEs, m= 6; BSs per core min/mean/max 3/5.9/6 (0 cores carried by one BS only, 22 by several); group-common 5 of 8 (BSs each 1.2), non-core private 0; distinct streams 28, per BS 16..16
+  S_max=32: c= 32 core UEs, m= 8; BSs per core min/mean/max 4/7.9/8 (0 cores carried by one BS only, 32 by several); group-common 3 of 3 (BSs each 4.0), non-core private 0; distinct streams 36, per BS 26..32
+
+== B = 16 BSs over 600 m x 600 m, K = 64 UEs, N = 4
+  S_max= 5: c= 16 core UEs, m= 4; BSs per core min/mean/max 4/4.0/4 (0 cores carried by one BS only, 16 by several); group-common 0 of 12 (BSs each 0.0), non-core private 0; distinct streams 17, per BS 5..5
+  S_max= 8: c= 20 core UEs, m= 5; BSs per core min/mean/max 5/5.0/5 (0 cores carried by one BS only, 20 by several); group-common 10 of 15 (BSs each 1.2), non-core private 0; distinct streams 31, per BS 8..8
+  S_max=12: c= 25 core UEs, m= 7; BSs per core min/mean/max 4/6.9/7 (0 cores carried by one BS only, 25 by several); group-common 4 of 18 (BSs each 1.0), non-core private 0; distinct streams 30, per BS 12..12
+  S_max=16: c= 30 core UEs, m= 8; BSs per core min/mean/max 4/7.7/8 (0 cores carried by one BS only, 30 by several); group-common 8 of 19 (BSs each 1.0), non-core private 0; distinct streams 39, per BS 16..16
+  S_max=32: c= 44 core UEs, m=11; BSs per core min/mean/max 8/10.8/11 (0 cores carried by one BS only, 44 by several); group-common 15 of 17 (BSs each 1.3), non-core private 0; distinct streams 60, per BS 32..32
+
+== B = 25 BSs over 1000 m x 1000 m, K = 100 UEs, N = 4
+  S_max= 5: c= 20 core UEs, m= 5; BSs per core min/mean/max 2/4.8/5 (0 cores carried by one BS only, 20 by several); group-common 3 of 18 (BSs each 1.0), non-core private 0; distinct streams 24, per BS 5..5
+  S_max= 8: c= 25 core UEs, m= 7; BSs per core min/mean/max 6/7.0/7 (0 cores carried by one BS only, 25 by several); group-common 1 of 20 (BSs each 1.0), non-core private 0; distinct streams 27, per BS 8..8
+  S_max=12: c= 32 core UEs, m= 8; BSs per core min/mean/max 8/8.0/8 (0 cores carried by one BS only, 32 by several); group-common 10 of 21 (BSs each 1.9), non-core private 0; distinct streams 43, per BS 12..12
+  S_max=16: c= 37 core UEs, m=10; BSs per core min/mean/max 7/9.8/10 (0 cores carried by one BS only, 37 by several); group-common 10 of 23 (BSs each 1.1), non-core private 0; distinct streams 48, per BS 16..16
+  S_max=32: c= 55 core UEs, m=14; BSs per core min/mean/max 7/13.5/14 (0 cores carried by one BS only, 55 by several); group-common 20 of 23 (BSs each 1.6), non-core private 0; distinct streams 76, per BS 32..32
