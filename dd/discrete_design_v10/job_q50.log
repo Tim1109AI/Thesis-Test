@@ -29,3 +29,4 @@ V1__E3: 24 runs to do (0 done) -> /home/user/Thesis-Test/dd/discrete_design_v10/
   [27/48] T2 a drop 902 R_th 2: rate 108.70, 11 streams  (30 CPU-s, 1604 s elapsed)
   [28/48] T2 a drop 902 R_th 2.5: rate 109.13, 11 streams  (31 CPU-s, 1656 s elapsed)
   [29/48] E3 f drop 901 R_th 2: rate 158.06, 18 streams  (301 CPU-s, 1840 s elapsed)
+  [30/48] E3 f drop 901 R_th 2.5: rate 158.04, 18 streams  (308 CPU-s, 1946 s elapsed)
